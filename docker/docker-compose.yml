@@ -1,0 +1,94 @@
+
+version: '3.7'
+
+x-airflow_image: &airflow_image
+  # airflowlocal will be replaced with airflowsvc soon
+  image: airflowlocal:latest
+
+x-airflow_volumes: &airflow_volumes
+  volumes:
+    - ${PATH_TO_DAGS}:/usr/local/airflow/dags
+    - ${PATH_TO_PLUGINS}:/usr/local/airflow/plugins
+
+
+x-airflow_environment: &airflow_environment
+  environment:
+    - LOAD_EX=n
+    - FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+    - EXECUTOR=Celery
+    - PROJECT_DIR=/usr/local/airflow/
+    - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+    - AIRFLOW__CORE__DAGS_FOLDER=/usr/local/airflow/dags/
+    - AIRFLOW__CORE__PLUGINS_FOLDER=/usr/local/airflow/plugins/
+    - APPLICATION_INSTALL_DIR=/usr/local/airflow
+    - RUN_AS_USER='airflow'
+    - QUEUE_NAME='default'
+    - ENV_DIR='gs://kohls-dev-dp-lab/'
+    - ENV_DB='default'
+    - ENVIRONMENT_NAME='local'
+    - AIRFLOW_DATA_BUCKET=ddhlle-dev-bd-airflow-data
+    - AIRFLOW__WEBSERVER__NAVBAR_COLOR=rgb(0, 135, 12)
+
+    # google cloud settings
+    - GOOGLE_APPLICATION_CREDENTIALS=/usr/local/airflow/creds/application_default_credentials.json
+    # default connections
+    - AIRFLOW_CONN_BIGQUERY_DEFAULT
+    - AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT
+
+services:
+  redis:
+    image: 'redis:3.2.7'
+
+  postgres:
+    image: postgres:9.6
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+
+  webserver:
+    <<: *airflow_image
+    <<: *airflow_volumes
+    <<: *airflow_environment
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8080:8080"
+    command: webserver
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+
+  flower:
+    <<: *airflow_image
+    restart: always
+    depends_on:
+      - redis
+    environment:
+      - EXECUTOR=Celery
+    ports:
+      - "5555:5555"
+    command: flower
+
+  scheduler:
+    <<: *airflow_image
+    <<: *airflow_volumes
+    <<: *airflow_environment
+    restart: always
+    depends_on:
+      - webserver
+    command: scheduler
+
+  worker:
+    <<: *airflow_image
+    <<: *airflow_volumes
+    <<: *airflow_environment
+    restart: always
+    depends_on:
+      - scheduler
+    command: worker
