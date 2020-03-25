@@ -1,4 +1,4 @@
-#How to run:
+How to run:
 
 - cd docker && docker-compose up -d
 - Go to `localhost:8080`
